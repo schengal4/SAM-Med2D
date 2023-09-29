@@ -276,8 +276,10 @@ def main():
             # Detect where the user clicked on the image and add 
             # the respective image coordinates to st.session_state and the image itself.
             with click_image:
-                # Returns the value of the previously clicked coordinates, even if on a previous run
-                run_id = st.session_state['run_id'] // 2
+                # streamlit_image_coordinates returns the value of the previously 
+                # clicked coordinates, even if on a previous run. So, the run_id statement here and the later
+                # statement incrementing st.session_state['run_id'] += 1 are meant to correct this behavior.
+                run_id = st.session_state['run_id']
                 value = streamlit_image_coordinates(resized_img, key=str(run_id), 
                                                 width = new_width, 
                                                 height = new_height)
