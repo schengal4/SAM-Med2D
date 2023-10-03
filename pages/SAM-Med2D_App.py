@@ -24,6 +24,7 @@ import warnings
 from scipy import ndimage
 import functools
 
+from instructions import write_introduction
 
 
 # pip install streamlit-image-annotation (bounding box), image url option
@@ -45,7 +46,18 @@ args.device = device
 args.image_size = 256
 args.encoder_adapter = True
 args.sam_checkpoint = "pretrain_model/sam-med2d_b.pth"
-
+sources = """
+Much of the code in the functions came from
+{cheng2023sammed2d,
+      title={SAM-Med2D}, 
+      author={Junlong Cheng and Jin Ye and Zhongying Deng and Jianpin Chen and Tianbin Li and Haoyu Wang and Yanzhou Su and
+              Ziyan Huang and Jilong Chen and Lei Jiangand Hui Sun and Junjun He and Shaoting Zhang and Min Zhu and Yu Qiao},
+      year={2023},
+      eprint={2308.16184},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
+"""
 @st.cache_resource
 def load_model(_args):
     """
@@ -144,7 +156,6 @@ def run_sammed(input_image, selected_points, last_mask, adapter_type):
     last_mask = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
     return [(image_pil, mask_image), last_mask]
 
-# @st.cache_data
 def draw_mask(mask, draw, random_color=False):
     """
     Draws a segmentation mask onto a given drawable surface.
@@ -234,14 +245,6 @@ def initialize_styling():
     try:
         st.markdown("""
         <style>
-        .stRadio [role=radiogroup] {
-            align-items: center;
-            justify-content: center;
-        }
-        .stRadio label {
-            align-items: center;
-            justify-content: center;
-        }
         .stButton button {
             display: block;
             margin-left: auto;
@@ -255,9 +258,12 @@ def initialize_styling():
     """,unsafe_allow_html=True)
     except:
         st.warning("Centering of radio buttons isn't working. The app will still work, though the layout might be slightly off.")
+
+
 # Initialize variables and file uploading UI
 def main():
     initialize_styling()
+    write_introduction()
     if 'points' not in st.session_state:
         st.session_state['points'] = []
     if 'last_mask' not in st.session_state:
@@ -269,7 +275,7 @@ def main():
     if 'uploaded_image_URL' not in st.session_state:
         st.session_state['uploaded_image_URL'] = None
     # File uploader widget or get image from URL
-    input_choice = st.radio("Do you want to ...", ["Upload an image (.jpg, .jpeg, or .png)?", "Type in the image URL?"], horizontal=True)
+    input_choice = st.radio("You can ...", ["Upload an image (.jpg, .jpeg, or .png)", "Or, type in the image URL"], horizontal=True)
     if ("Upload an image" in input_choice):
         uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
         uploading_file_progress_message = st.empty()
@@ -298,6 +304,7 @@ def main():
                 uploaded_file = None
             
     # Select ML model to use (with adapter or without one)
+
     model = st.selectbox("Select Adapter for Model", ("SAM-Med2D-B_w/o_adapter", "SAM-Med2D-B"))
     click_image = st.container()
     if uploaded_file is not None:
