@@ -1,5 +1,11 @@
 import streamlit as st
+import io
+container_1 = st.empty()
+container_1.info("Models are loading. If they aren't in the cache, they can take a few minutes to load.")
+
+
 from streamlit_javascript import st_javascript
+import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 from streamlit_image_coordinates import streamlit_image_coordinates
 import time
@@ -19,8 +25,18 @@ from scipy import ndimage
 import functools
 
 
-# pip install streamlit-image-annotation (bounding box), image url option
 
+# pip install streamlit-image-annotation (bounding box), image url option
+# from huggingface_hub import hf_hub_download
+# hf_hub_download("schengal1/SAM-Med2D_model", "sam-med2d_b.pth")
+# print(os.getcwd())
+# time.sleep(200)
+
+
+
+# Couple constants for readability purposes.
+FOREGROUND_POINT = 1
+BACKGROUND_POINT = 0
 
 # CODE TO LOAD SAM-2D MODELS
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,12 +73,10 @@ def load_model(_args):
     return predictor
 
 # Initializaiton code to load the models.
-container_1 = st.empty()
-container_1.write("Models are loading. If they aren't in the cache, they can take a few minutes to load.")
 predictor_with_adapter = load_model(args) # Loads the model with the adapter layer
 args.encoder_adapter = False
 predictor_without_adapter = load_model(args) # Loads the similar model but without the adapter layer
-container_1.write("Models are loaded.")
+container_1.info("Models are loaded.") # See statement below import streamlit as st for where container_1 is declared.
 
 # Other functions used to run the app
 def run_sammed(input_image, selected_points, last_mask, adapter_type):
@@ -155,8 +169,9 @@ def draw_mask(mask, draw, random_color=False):
     nonzero_coords = np.transpose(np.nonzero(mask))
 
     for coord in nonzero_coords:
-        draw.point(coord[::-1], fill=color)
 
+        draw.point(coord[::-1], fill=color)
+# TODO: Draw label = 0 points as red crosses instead of red circles. Also, eliminate hardcoding
 def draw_points(points, draw, r=5):
     """
     Draws labeled points onto a given drawable surface in memory (not yet onto the Streamlit UI).
@@ -174,9 +189,9 @@ def draw_points(points, draw, r=5):
     show_point = []
     for point, label in points:
         x,y = point
-        if label == 1:
+        if label == FOREGROUND_POINT:
             draw.ellipse((x-r, y-r, x+r, y+r), fill='green')
-        elif label == 0:
+        elif label == BACKGROUND_POINT:
             draw.ellipse((x-r, y-r, x+r, y+r), fill='red')
             
 def get_original_points(resized_points, scaling_factor):
@@ -203,35 +218,93 @@ def get_original_points(resized_points, scaling_factor):
     return original_points
 
 def attempt_rerun():
+    """
+    Tries to stop the execution of streamlit script and then rerun from the beginning.
+    """
     try:
-        # TODO: Fix coding style here.
         st.experimental_rerun()
     except Exception as e:
         st.error("Streamlit UI Error: Points won't display on image as expected. \
                                 Please click again on the point you previously clicked on to fix this issue.")
-
-
+def reset_points_and_masks():
+    st.session_state['points'] = []
+    st.session_state['last_mask'] = None
+def initialize_styling():
+    # TODO: image-with-the-indicated region segmented is the id of the subheader. if the subheader title changes, the id will change and some of the CSS below won't work.
+    try:
+        st.markdown("""
+        <style>
+        .stRadio [role=radiogroup] {
+            align-items: center;
+            justify-content: center;
+        }
+        .stRadio label {
+            align-items: center;
+            justify-content: center;
+        }
+        .stButton button {
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            align-items: center;
+        }
+        #image-with-the-indicated-region-segmented {
+            text-align: center;        
+        }
+        </style>
+    """,unsafe_allow_html=True)
+    except:
+        st.warning("Centering of radio buttons isn't working. The app will still work, though the layout might be slightly off.")
 # Initialize variables and file uploading UI
 def main():
+    initialize_styling()
     if 'points' not in st.session_state:
         st.session_state['points'] = []
     if 'last_mask' not in st.session_state:
         st.session_state['last_mask'] = None
     if 'run_id' not in st.session_state:
         st.session_state['run_id'] = 1
-    # File uploader widget
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"]) 
+    if 'uploaded_file_id' not in st.session_state:
+        st.session_state['uploaded_file_id'] = None
+    if 'uploaded_image_URL' not in st.session_state:
+        st.session_state['uploaded_image_URL'] = None
+    # File uploader widget or get image from URL
+    input_choice = st.radio("Do you want to ...", ["Upload an image (.jpg, .jpeg, or .png)?", "Type in the image URL?"], horizontal=True)
+    if ("Upload an image" in input_choice):
+        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+        uploading_file_progress_message = st.empty()
+        container_1.empty()
+        if uploaded_file is not None and uploaded_file.file_id != st.session_state['uploaded_file_id']:
+            uploading_file_progress_message.info("Loading image and preparing to display it. This can take several seconds.")
+            reset_points_and_masks()
+            st.session_state['uploaded_file_id'] = uploaded_file.file_id
+    elif input_choice == "Type in the image URL?":
+            image_url = st.text_input("Enter the URL of the image you want to upload below (e.g., https://pressbooks.pub/app/uploads/sites/3987/2017/10/chest-case-12-2-909x1024.jpg)", help = "To get the URL of a Google Search image, right-click on it. Then, select/click on 'Copy Image Address'.")
+            uploading_file_progress_message = st.empty()
+            container_1.empty()
+            if image_url.strip() != "": # Checks if the user entered some text for the image URL
+                try:
+                    urllib.request.urlretrieve(image_url, "__image.png")
+                except: 
+                    st.error("The URL you entered isn't working.") # If the user enters an invalid URL
+                    uploaded_file = None
+                else:
+                    uploaded_file = "__image.png"
+                    if image_url != st.session_state['uploaded_image_URL']:
+                        uploading_file_progress_message.info("Loading image and preparing to display it. This can take several seconds.")
+                        st.session_state['uploaded_image_URL'] = image_url
+                        reset_points_and_masks()
+            else:
+                uploaded_file = None
+            
     # Select ML model to use (with adapter or without one)
     model = st.selectbox("Select Adapter for Model", ("SAM-Med2D-B_w/o_adapter", "SAM-Med2D-B"))
     click_image = st.container()
     if uploaded_file is not None:
         with Image.open(uploaded_file) as img:
             width, height = img.size
-            # Determine scaling factor to fit image appropriately to fit 
-            # the screen. The except block offers 
+            # Determine scaling factor to fit image appropriately to fit the screen. The except block offers
             # a backup in case st_javascript package breaks/fails.
-            # 
-            
             try:
                 ui_width = st_javascript("window.innerWidth")
                 scaling_factor = ui_width/width
@@ -239,66 +312,76 @@ def main():
                 st.warning("Error resizing image. Using default scaling.")
                 scaling_factor = 500/width
             new_width, new_height = int(width*scaling_factor), int(height*scaling_factor)
-
             resized_img = img.resize((new_width, new_height))
-            # st.write(resized_img.size)
 
-            a = """
-            Expected behavior:
+            # Select foreground or background point. Foreground point 
+            # means a point in the region the user wants to segment. 
+            # Background points are points that shouldn't be in the region 
+            # the user wants to segment. 
+            point_label = st.radio("**Point Labels**", ["Foreground Point", "Background Point"], horizontal=True)
+            if point_label == "Foreground Point":
+                label = FOREGROUND_POINT
+            elif point_label == "Background Point":
+                label = BACKGROUND_POINT
 
-            Before: st.session_state["points"] = [((100, 101). 1)]
-            After: st.session_state["points"]
-
-            """
-
-
-            # Reset all previously marked points (and masks) if user clciks on button.
-            reset_points = st.button("Erase All Marked Points on the Image")
+            # Reset all previously marked points (and masks) if user clicks on button.
+            left_btn, right_btn = st.columns(2)
+            reset_points = left_btn.button("Erase All Marked Points on the Image")
             if reset_points:
-                st.session_state['points'] = []
-
-                st.session_state['last_mask'] = None
-
+                reset_points_and_masks()
             draw = ImageDraw.Draw(resized_img)
             
             # Draw an circle at each coordinate in points
             draw_points(st.session_state['points'], draw, r=8)
 
-
-            # Select foreground or background point
-            point_label = st.radio("point labels", ["Foreground Point", "Background Point"], horizontal=True)
-            if point_label == "Foreground Point":
-                label = 1
-            elif point_label == "Background Point":
-                label = 0
-
-
             # Detect where the user clicked on the image and add 
             # the respective image coordinates to st.session_state and the image itself.
             with click_image:
-                # streamlit_image_coordinates returns the value of the previously 
-                # clicked coordinates, even if on a previous run. So, the run_id statement here and the later
-                # statement incrementing st.session_state['run_id'] += 1 are meant to correct this behavior.
+                # streamlit_image_coordinates returns the value of the previously clicked coordinates, even if on a 
+                # previous run. This was causing some unexpected UI behavior. So, the run_id = st.session_state['run_id'] 
+                # statement and the later statement incrementing st.session_state['run_id'] += 1 are meant to correct this.
                 run_id = st.session_state['run_id']
                 value = streamlit_image_coordinates(resized_img, key=str(run_id), 
                                                 width = new_width, 
                                                 height = new_height)
+                uploading_file_progress_message.empty()
                 if value is not None:
                     point = int(value["x"]), int(value["y"])
                     all_points = [pt for pt, label_ in st.session_state["points"]]
-                    if (point not in all_points):
+                    if (point, label) not in st.session_state['points']:
                         st.session_state["points"].append((point, label))
                         st.session_state['run_id'] += 1
                         attempt_rerun()
             # Run ML model on image with the points the user selected passed in.
-            run_model = st.button("Run MedSAM-2D model.")
+            run_model = right_btn.button("Run SAM-Med2D model.")
             if run_model:
-                val1, val2 = run_sammed(np.array(img), get_original_points(st.session_state["points"], scaling_factor), 
+                running_model = st.empty()
+                running_model.info("Running the image segmentation algorithm. This can take several seconds.")
+                all_labels = [label_ for pt, label_ in st.session_state["points"]]
+                if len(st.session_state["points"]) == 0:
+                     st.error("Please select at least one foreground point in the above image before running the model.\
+                             To do this, click the 'Foreground Point' button and then click a point on the image.")
+                elif FOREGROUND_POINT not in all_labels:
+                    st.error("Please select at least one foreground point in the above image before running the model.\
+                             To do this, click the 'Foreground Point' button and then click a point on the image.")
+                else:
+                    val1, val2 = run_sammed(np.array(img), get_original_points(st.session_state["points"], scaling_factor), # img = original image that wasn't modified or drawn upon
                                         st.session_state['last_mask'], model)
-                image_with_mask, mask = val1
-                st.session_state['last_mask'] = val2
-                st.image(image_with_mask, use_column_width=True)
-            
-            # st.write(st.session_state['points'])
+                    image_with_mask, mask = val1
+                    st.session_state['last_mask'] = val2
+                    st.divider()
+                    st.subheader("Image with the Indicated Region Segmented.")
+                    st.image(image_with_mask, use_column_width=True)
+
+                    buf = io.BytesIO()
+                    image_with_mask.save(buf, format="PNG")
+                    image_bytes = buf.getvalue()
+                    btn = st.download_button(
+                        label="Download image",
+                        data=image_bytes,
+                        mime="image/png"
+                    )
+                running_model.empty()
+                    
 if __name__ == "__main__": 
     main()
