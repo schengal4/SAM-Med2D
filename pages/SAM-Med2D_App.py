@@ -23,8 +23,10 @@ import random
 import warnings
 from scipy import ndimage
 import functools
+import pandas as pd
 
 from instructions import write_introduction
+from streamlit_drawable_canvas import st_canvas
 
 
 # pip install streamlit-image-annotation (bounding box), image url option
@@ -156,6 +158,83 @@ def run_sammed(input_image, selected_points, last_mask, adapter_type):
     last_mask = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
     return [(image_pil, mask_image), last_mask]
 
+def run_sammed_bbox_draft(input_image, original_bboxes, last_mask, adapter_type):
+
+    """
+    Performs segmentation on the provided image using selected points and an optional previous mask.
+    
+    Parameters:
+    - input_image (numpy.array): The input image on which segmentation is to be performed.
+    - selected_points (list of tuples): A list of user-selected points on the image. Each tuple contains 
+    the coordinates and label of a point.
+    - last_mask (torch.Tensor or None): A tensor representing the previous segmentation result. If it's 
+    the user's first interaction or no prior mask is available, this should be None.
+    - adapter_type (str): Specifies the type of adapter to use for prediction. Determines which predictor 
+    model to use (e.g., "SAM-Med2D-B").
+    
+    Returns:
+    - list: A list containing two elements:
+        1. A tuple with the original image (with segmentation mask overlaid) and a separate mask image.
+        2. An updated last_mask tensor representing the latest segmentation result.
+    
+    Note:
+    The function selects the appropriate predictor based on the adapter_type, uses it to segment the 
+    input image based on the selected points and optionally the last_mask, and then visualizes the results.
+    """
+
+    if adapter_type == "SAM-Med2D-B":
+        predictor = predictor_with_adapter
+        # st.write("Using model with adapter layer.")
+    else:
+        predictor = predictor_without_adapter
+        # st.write("Using model without adapter layer.")
+        
+    image_pil = Image.fromarray(input_image) #.convert("RGB")
+    image = input_image
+    # st.write(image.shape)
+    try:
+        H,W,_ = image.shape
+    except:
+        st.warning("Image is grayscale.")
+        image = np.repeat(image[:, :, np.newaxis], 3, axis=2)
+        H,W, _ = image.shape
+    predictor.set_image(image)
+
+    mask_image = Image.new('RGBA', (W, H), color=(0, 0, 0, 0))
+    mask_draw = ImageDraw.Draw(mask_image)
+    for i in range(len(original_bboxes)):
+        last_mask_ = None
+        for j in range(4):
+            masks, _, logits = predictor.predict(
+            box=original_bboxes[i], 
+            mask_input = last_mask_, #TODO: Adjust this to reflect continuous improvement
+            multimask_output=True 
+            ) 
+            last_mask_ = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
+
+        # Draw masks on the image.
+        mask_image = Image.new('RGBA', (W, H), color=(0, 0, 0, 0))
+        mask_draw = ImageDraw.Draw(mask_image)
+        
+        for mask in masks:
+            draw_mask(mask, mask_draw, random_color=False)
+        image_pil = image_pil.convert('RGBA')
+        image_pil.alpha_composite(mask_image)
+
+        image_draw = ImageDraw.Draw(image_pil)
+        for bbox in original_bboxes:
+            upper_left_coordinate = (bbox[0], bbox[1])
+            lower_right_coordinate = (bbox[2], bbox[3])
+            image_draw.rectangle((upper_left_coordinate, lower_right_coordinate), outline="green", width=2)
+
+    # draw_points(selected_points, image_draw)
+    # bbox_Draw = ImageDraw.Draw()
+    # for bbox in original_bboxes:
+    #     draw.rectangle(list(bbox), fill=(0, 255, 0, 0.5), 
+
+    return [(image_pil, mask_image), last_mask]
+
+
 def draw_mask(mask, draw, random_color=False):
     """
     Draws a segmentation mask onto a given drawable surface.
@@ -173,9 +252,9 @@ def draw_mask(mask, draw, random_color=False):
     """
     if random_color:
         color = (random.randint(0, 255), random.randint(
-            0, 255), random.randint(0, 255), 153)
+            0, 255), random.randint(0, 255), int(255*0.5))
     else:
-        color = (30, 144, 255, 153)
+        color = (30, 144, 255, int(255*0.5))
 
     nonzero_coords = np.transpose(np.nonzero(mask))
 
@@ -204,6 +283,9 @@ def draw_points(points, draw, r=5):
             draw.ellipse((x-r, y-r, x+r, y+r), fill='green')
         elif label == BACKGROUND_POINT:
             draw.ellipse((x-r, y-r, x+r, y+r), fill='red')
+
+# TODO: Draw BBoxes
+    
             
 def get_original_points(resized_points, scaling_factor):
     """
@@ -222,11 +304,21 @@ def get_original_points(resized_points, scaling_factor):
             original_point_x_coord, original_point_y_coord = int(point[0]/scaling_factor), int(point[1]/scaling_factor)
             original_points.append(((original_point_x_coord, original_point_y_coord), label))
     except:
-        st.warning("Points don't have a corresponding foreground/background label. This may impact the program's accuracy.")
+        # st.warning("Points don't have a corresponding foreground/background label. This may impact the program's accuracy.")
         for point in resized_points:
             original_point_x_coord, original_point_y_coord = int(point[0]/scaling_factor), int(point[1]/scaling_factor)
             original_points.append((original_point_x_coord, original_point_y_coord))
     return original_points
+def get_original_bbox_coords(resized_bbox_coords, scaling_factor):
+    """
+    Given a list of coordinates on the resized image, get the original coordinates
+    Input: the bbox coordinates on the resized image
+    Output: the orignial bboxes rounded to the nearest integer.
+    
+    """
+    resized_bbox_coords_numpy = np.array(resized_bbox_coords)
+    original_bboxes = np.array(resized_bbox_coords)/scaling_factor
+    return np.rint(original_bboxes)
 
 def attempt_rerun():
     """
@@ -260,6 +352,53 @@ def initialize_styling():
         st.warning("Centering of radio buttons isn't working. The app will still work, though the layout might be slightly off.")
 
 
+def return_bbox_coordinates(canvas_result):
+    """
+    Takes the canvas result and returns bbox coordinates. For now takes in the objects df
+    """
+    def get_bbox_info(left, top, width, height):
+        x1, y1, x2, y2 = round(left), round(top), round(left + width), round(top + height)
+        return [x1, y1, x2, y2]
+    # Get the objects dataframe from the canvas result
+    if canvas_result.json_data is not None:
+        objects = pd.json_normalize(canvas_result.json_data["objects"])
+        for col in objects.select_dtypes(include=["object"]).columns:
+            objects[col] = objects[col].astype("str")
+        if objects.empty:
+            return []
+    bbox_info = objects.loc[:, ["left", "top", "width", "height"]]
+    # st.dataframe(bbox_info)
+    bbox_info = bbox_info.to_numpy()
+
+    # Get the bbox coordinates in the format list([x_upper_left, y_upper_left, x_lower_right, y_lower_right])
+    bbox_coordinates = []
+    for row in bbox_info:
+        bbox_coordinates.append(get_bbox_info(row[0], row[1], row[2], row[3]))
+    result = np.array(bbox_coordinates)
+    return result
+
+def return_clicked_coordinates(canvas_result, stroke_width):
+    if canvas_result.json_data is not None:
+        objects = pd.json_normalize(canvas_result.json_data["objects"])
+    for col in objects.select_dtypes(include=["object"]).columns:
+        objects[col] = objects[col].astype("str")
+    # st.dataframe(objects)
+    if objects.empty:
+        return []
+
+    points_info = objects.loc[:, ["left", "top", "fill"]]
+    points_info = points_info.to_numpy()
+
+    coords = []
+    for row in points_info:
+        x, y = int(row[0]) + int(stroke_width)//2, int(row[1])
+        if row[2] == "green":
+            label = 1
+        elif row[2] == "red":
+            label = 0
+        coords.append(((round(x), round(y)), label))
+    return coords
+        
 # Initialize variables and file uploading UI
 def main():
     initialize_styling()
@@ -276,7 +415,7 @@ def main():
         st.session_state['uploaded_image_URL'] = None
     # File uploader widget or get image from URL
     input_choice = st.radio("You can ...", ["Upload an image (.jpg, .jpeg, or .png)", "Or, type in the image URL"], horizontal=True)
-    if ("Upload an image" in input_choice):
+    if ("upload" in input_choice.lower() and "image" in input_choice.lower() and "url" not in input_choice.lower()):
         uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
         uploading_file_progress_message = st.empty()
         container_1.empty()
@@ -284,7 +423,7 @@ def main():
             uploading_file_progress_message.info("Loading image and preparing to display it. This can take several seconds.")
             reset_points_and_masks()
             st.session_state['uploaded_file_id'] = uploaded_file.file_id
-    elif input_choice == "Type in the image URL?":
+    elif "image" in input_choice.lower() and "url" in input_choice.lower():
             image_url = st.text_input("Enter the URL of the image you want to upload below (e.g., https://pressbooks.pub/app/uploads/sites/3987/2017/10/chest-case-12-2-909x1024.jpg)", help = "To get the URL of a Google Search image, right-click on it. Then, select/click on 'Copy Image Address'.")
             uploading_file_progress_message = st.empty()
             container_1.empty()
@@ -304,8 +443,21 @@ def main():
                 uploaded_file = None
             
     # Select ML model to use (with adapter or without one)
+    model_selection_tooltip = "Choose the desired machine learning model from the dropdown menu. \
+        You can pick between 'SAM-Med2D-B_w/o_adapter' and 'SAM-Med2D-B'.  \n\
+            - Note that when the author tested the models on different validation datasets, \
+                the 'SAM-Med2D-B_w/o_adapter' model somewhat outperformed the 'SAM-Med2D-B' model."
+    model = st.selectbox("Select Adapter for Model", ("SAM-Med2D-B_w/o_adapter", "SAM-Med2D-B"), help=model_selection_tooltip)
 
-    model = st.selectbox("Select Adapter for Model", ("SAM-Med2D-B_w/o_adapter", "SAM-Med2D-B"))
+
+    tooltip_for_mode = "In **Bounding Box** mode, you draw rectangular boxes around areas \
+                of the image you're interested in.  \n"
+    tooltip_for_mode += "In **Multi-point interaction** mode, you directly interact with the image by marking specific points on it; \
+        think of it like giving hints to the tool about which areas you're interested in and which areas you're not.  \n"
+    tooltip_for_mode += "When the authors tested the model on the test dataset and different validation datasets, the **Bounding Box** mode \
+        outperformed the **Multi-point interaction mode**."
+    mode = st.radio("Select mode", ["Bounding Box", "Multi-point interaction"], help=tooltip_for_mode, horizontal=True)
+    st.divider()
     click_image = st.container()
     if uploaded_file is not None:
         with Image.open(uploaded_file) as img:
@@ -325,70 +477,146 @@ def main():
             # means a point in the region the user wants to segment. 
             # Background points are points that shouldn't be in the region 
             # the user wants to segment. 
-            point_label = st.radio("**Point Labels**", ["Foreground Point", "Background Point"], horizontal=True)
-            if point_label == "Foreground Point":
-                label = FOREGROUND_POINT
-            elif point_label == "Background Point":
-                label = BACKGROUND_POINT
+            if mode == "Multi-point interaction":
+                point_label = st.radio("**Point Labels**", ["Foreground Point", "Background Point"], horizontal=True)
+                if point_label == "Foreground Point":
+                    label = FOREGROUND_POINT
+                    fill_color_ = "green"
+                    stroke_color_ = "green"
+                elif point_label == "Background Point":
+                    label = BACKGROUND_POINT
+                    fill_color_ = "red"
+                    stroke_color_ = "red"
+                
 
-            # Reset all previously marked points (and masks) if user clicks on button.
-            left_btn, right_btn = st.columns(2)
-            reset_points = left_btn.button("Erase All Marked Points on the Image")
-            if reset_points:
-                reset_points_and_masks()
-            draw = ImageDraw.Draw(resized_img)
-            
-            # Draw an circle at each coordinate in points
-            draw_points(st.session_state['points'], draw, r=8)
-
+            # Reset all previously marked points (and masks) if user clicks on button. Took out this due to canvas's inbuilt reset function. But, make sure that the masks are reset too.
+    
             # Detect where the user clicked on the image and add 
             # the respective image coordinates to st.session_state and the image itself.
             with click_image:
-                # streamlit_image_coordinates returns the value of the previously clicked coordinates, even if on a 
-                # previous run. This was causing some unexpected UI behavior. So, the run_id = st.session_state['run_id'] 
-                # statement and the later statement incrementing st.session_state['run_id'] += 1 are meant to correct this.
-                run_id = st.session_state['run_id']
-                value = streamlit_image_coordinates(resized_img, key=str(run_id), 
-                                                width = new_width, 
-                                                height = new_height)
+                if mode == "Multi-point interaction":
+                    # streamlit_image_coordinates returns the value of the previously clicked coordinates, even if on a 
+                    # previous run. This was causing some unexpected UI behavior. So, the run_id = st.session_state['run_id'] 
+                    # statement and the later statement incrementing st.session_state['run_id'] += 1 are meant to correct this.
+                    stroke_width_ = 6
+                    st.markdown("""
+                    Below is your image. Please follow these steps:
+
+                    1. **Marking Points**:
+                        - **Foreground Points (Green)**: Click on areas you're interested in. For instance, if you're examining an MRI scan and want to emphasize a potential lesion, place green points on that region.
+                        - **Background Points (Red)**: Mark areas you're not focusing on. These red points help the tool differentiate areas of non-interest. For regions in the MRI scan you're not concerned about, mark them with red points.
+
+                    2. **Buttons Below Image**:
+                        - **⤺ Undo** the last point.
+                        - **⤼ Redo** a removed point.
+                        - 🗑️ **Clear** all points.
+
+                    3. Once you're satisfied with your markings, click 'Run SAM-Med2D model' below the image.
+
+                    4. **Tips**:
+                        - For optimal results, use a combination of both foreground and background points.
+                        - Often, just a few strategically placed points can provide the clarity the model needs!
+                    """)
+                    canvas_result = st_canvas(fill_color=fill_color_, stroke_color=stroke_color_, stroke_width= stroke_width_, 
+                                              background_image=img, height=new_height, width=new_width, drawing_mode="point", 
+                                              update_streamlit=True, key = "point_canvas")
+                    coords = return_clicked_coordinates(canvas_result, stroke_width_)
+                    #TODO: CheckS
+                    if len(coords) == 0:
+                        st.session_state['last_mask'] = None
+                elif mode == "Bounding Box":
+                    fill_color_ = "rgba(0, 255, 0, 0.2)"
+                    stroke_color_ = "rgba(0, 255, 0, 0.5)"
+                    st.markdown("""
+                        Below is your image. Please follow these steps:
+
+                        1. Draw rectangles around areas you're interested in.
+                        2. Use the buttons below the image to:
+                            - **⤺** Undo the last rectangle.
+                            - **⤼** Redo a removed rectangle.
+                            - 🗑️ Clear all rectangles.
+                        3. Once done, click 'Run SAM-Med2D model' below the image.
+                        """)
+                    
+                    canvas_result =  st_canvas(fill_color=fill_color_, stroke_color=stroke_color_, stroke_width= 6, 
+                                                                background_image=img, height=new_height, width=new_width, drawing_mode="rect", key="bbox_canvas")
+                    bounding_boxes = return_bbox_coordinates(canvas_result)
+                    if len(bounding_boxes) == 0:
+                        st.session_state["last_mask"] = None
                 uploading_file_progress_message.empty()
-                if value is not None:
-                    point = int(value["x"]), int(value["y"])
-                    all_points = [pt for pt, label_ in st.session_state["points"]]
-                    if (point, label) not in st.session_state['points']:
-                        st.session_state["points"].append((point, label))
-                        st.session_state['run_id'] += 1
-                        attempt_rerun()
+                    # if value is not None:
+                    #     point = int(value["x"]), int(value["y"])
+                    #     all_points = [pt for pt, label_ in st.session_state["points"]]
+                    #     if (point, label) not in st.session_state['points']:
+                    #         st.session_state["points"].append((point, label))
+                    #         st.session_state['run_id'] += 1
+                    #         attempt_rerun()
             # Run ML model on image with the points the user selected passed in.
-            run_model = right_btn.button("Run SAM-Med2D model.")
+            run_model = st.button("Run SAM-Med2D model.")
             if run_model:
                 running_model = st.empty()
                 running_model.info("Running the image segmentation algorithm. This can take several seconds.")
-                all_labels = [label_ for pt, label_ in st.session_state["points"]]
-                if len(st.session_state["points"]) == 0:
-                     st.error("Please select at least one foreground point in the above image before running the model.\
-                             To do this, click the 'Foreground Point' button and then click a point on the image.")
-                elif FOREGROUND_POINT not in all_labels:
-                    st.error("Please select at least one foreground point in the above image before running the model.\
-                             To do this, click the 'Foreground Point' button and then click a point on the image.")
-                else:
-                    val1, val2 = run_sammed(np.array(img), get_original_points(st.session_state["points"], scaling_factor), # img = original image that wasn't modified or drawn upon
-                                        st.session_state['last_mask'], model)
-                    image_with_mask, mask = val1
-                    st.session_state['last_mask'] = val2
-                    st.divider()
-                    st.subheader("Image with the Indicated Region Segmented.")
-                    st.image(image_with_mask, use_column_width=True)
+                if mode == "Multi-point interaction":
+                    all_labels = [label_ for pt, label_ in coords]
+                    if len(coords) == 0:
+                        st.error("Please select at least one foreground point in the above image before running the model.\
+                                To do this, click the 'Foreground Point' button and then click a point on the image.")
+                    elif FOREGROUND_POINT not in all_labels:
+                        st.error("Please select at least one foreground point in the above image before running the model.\
+                                To do this, click the 'Foreground Point' button and then click a point on the image.")
+                    else:
+                        val1, val2 = run_sammed(np.array(img), get_original_points(coords, scaling_factor), # img = original image that wasn't modified or drawn upon
+                                            st.session_state['last_mask'], model)
+                        image_with_mask, mask = val1
+                        st.session_state['last_mask'] = val2
+                        st.divider()
+                        st.subheader("Image with the Indicated Region Segmented.")
+                        st.image(image_with_mask, use_column_width=True)
 
-                    buf = io.BytesIO()
-                    image_with_mask.save(buf, format="PNG")
-                    image_bytes = buf.getvalue()
-                    btn = st.download_button(
-                        label="Download image",
-                        data=image_bytes,
-                        mime="image/png"
-                    )
+                        buf = io.BytesIO()
+                        image_with_mask.save(buf, format="PNG")
+                        image_bytes = buf.getvalue()
+                        btn = st.download_button(
+                            label="Download image",
+                            data=image_bytes,
+                            mime="image/png"
+                        )
+                if mode == "Bounding Box":
+                    if len(bounding_boxes) == 0:
+                        st.error("Please draw at least one rectangle in the above image before running the model.")
+                    else:
+                        try:
+                            val1, val2 = run_sammed_bbox(np.array(img), get_original_bbox_coords(bounding_boxes, scaling_factor), 
+                                                    st.session_state['last_mask'], model)
+                        except:
+                            # st.info("Implemented multiple-bbox-selection functionality by repeatedly calling the model on each of the individual bboxes\
+                                    # Currently working on implementing it directly.")
+                            val1, val2 = run_sammed_bbox_draft(np.array(img), get_original_bbox_coords(bounding_boxes, scaling_factor), 
+                                                    st.session_state['last_mask'], model)
+                        image_with_mask, mask = val1
+                        st.session_state['last_mask'] = val2
+                        st.divider()
+                        st.subheader("Image with the Indicated Region Segmented.")
+                        st.image(image_with_mask, use_column_width=True)
+
+                        buf = io.BytesIO()
+                        image_with_mask.save(buf, format="PNG")
+                        image_bytes = buf.getvalue()
+                        btn = st.download_button(
+                            label="Download image",
+                            data=image_bytes,
+                            mime="image/png"
+                        )
                 running_model.empty()
-                    
+
+
+            # BBox Mode; 
+            # canvas_result = st_canvas(fill_color="rgba(25, 255, 25, 0.3)", stroke_color="rgba(25, 255, 25, 0.8)", stroke_width= 5, background_image=img, height=new_height, width=new_width, drawing_mode="rect", key="bbox_canvas")
+            # st.write(return_bbox_coordinates(canvas_result))
+
+            # st.subheader("Points coordinates")
+                # Top: center; left = center - radius
+
+            
 if __name__ == "__main__": 
     main()

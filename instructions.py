@@ -1,6 +1,6 @@
 import streamlit as st
 import io
-
+# Change file name to Instructions.py
 def write_introduction():
     st.title("SAM-Med2D Streamlit App")
     st.write("SAM-Med2D is an interactive medical image segmentation model based on the Segment Anything Model (SAM) model. \
@@ -13,16 +13,15 @@ def write_app_instructions():
         - On the main screen, you'll be presented with two options: 
             * Upload an image (.jpg, .jpeg, or .png) directly from your device.
             * Enter the URL of an image.
-        - Select your preferred option.  
-    
-        &nbsp;       
-                
+        - Select your preferred option. 
+    """)
+    st.markdown(""" 
         *If Uploading Directly:*
         - Click on "Choose an image..." and navigate to your desired image.       
                 
         *If Using an Image URL:*
         - Paste the image's URL in the provided text box. 
-                * Tip: If sourcing an image from Google Search, right-click on the image and select "Copy Image Address" to obtain its URL.
+            * Tip: If sourcing an image from Google Search, right-click on the image and select "Copy Image Address" to obtain its URL.
         """)
     st.markdown("""
     2. **Model Selection:**
@@ -72,22 +71,21 @@ def write_app_instructions():
     We hope that you find this app helpful in your medical image analysis tasks. We're committed to refining and enhancing this tool and welcome all feedback to serve our users better.
     """)
     st.write("""
-    Once you've read the instructions, navigate to the "SAM-Med2D App" page from the sidebar to use the application.
+    Once you've read the instructions, navigate to the "SAM-Med2D App" page from the sidebar to use the application.\n
     """)
+    
 
-    # ------Credits----------
-    st.subheader("Credits:")
-    st.write("This app is built on the model from the SAM-Med2D paper. The authors are Junlong ChengJin Ye, \
+def cite_the_source(section_header):
+    st.write(section_header)
+    st.write("This app is built on the model from the SAM-Med2D paper. The authors are Junlong Cheng, Jin Ye, \
           Zhongying Deng, Jianpin Chen, Tianbin Li, Haoyu Wang, Yanzhou Su, Ziyan Huang, Jilong Chen, Lei Jiangand, \
           Hui Sun, Junjun He, Shaoting Zhang, Min Zhu, and Yu Qiao.")
 
     st.write("Also, a significant portion of the code in the app comes from the paper's associated GitHub code: https://github.com/OpenGVLab/SAM-Med2D.")
 
-   
 # Initialize variables and file uploading UI
-def instructions():
-    write_introduction()
-    write_app_instructions()
                     
 if __name__ == "__main__": 
-    instructions()
+    write_introduction()
+    write_app_instructions()
+    cite_the_source("### Credits:")
