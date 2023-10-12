@@ -10,29 +10,32 @@ def write_app_instructions():
 
     st.markdown("""
     1. **Image Input:**
-        - On the main screen, you'll be presented with two options: 
-            * Upload an image (.jpg, .jpeg, or .png) directly from your device.
-            * Enter the URL of an image.
-        - Select your preferred option. 
-    """)
-    st.markdown(""" 
-        *If Uploading Directly:*
-        - Click on "Choose an image..." and navigate to your desired image.       
-                
-        *If Using an Image URL:*
-        - Paste the image's URL in the provided text box. 
-            * Tip: If sourcing an image from Google Search, right-click on the image and select "Copy Image Address" to obtain its URL.
+        - You can either: 
+            * **Upload an image** directly from your device. Accepted formats are ".jpg", ".jpeg", or ".png".
+            * Or **type in the image URL**. If using Google Search, right-click on the image and select "Copy Image Address" to obtain the URL.
         """)
     st.markdown("""
     2. **Model Selection:**
-       - You'll have the option to select between two SAM-Med2D models: `SAM-Med2D-B_w/o_adapter` and `SAM-Med2D-B`. Make your choice from the dropdown menu.
+       - You'll have the option to select between two SAM-Med2D models: `SAM-Med2D-B_w/o_adapter` and `SAM-Med2D-B`. Make your choice from the dropdown menu. \
+        The 'SAM-Med2D-B_w/o_adapter' model slightly performs the other according to testing done by the model makers.
     """)
     st.markdown("""
-    3. **Marking Points on the Image:**
-       - Once your image is displayed, decide if you want to mark a "Foreground Point" (a point in the region you aim to segment) or a "Background Point" (areas you want to exclude from the segmentation).
-       - Click on the corresponding radio button under "Point Labels".
-       - Click directly on the image to place your chosen point. 
+    3. **Segmentation Mode**
+        - **Bounding Box Mode**: Draw rectangles around the area you wish to segment.
+            - Once you've drawn the desired bounding boxes, press 'Run SAM-Med2D model'.
+        - **Multi-point Interaction Mode**: Mark specific points on the image.
+            * Foreground Points (Green): Indicate areas of interest. For instance, potential lesions in an MRI scan.
+            * Background Points (Red): Specify areas you're not interested in, helping the model differentiate.
+            * After marking the points, click 'Run SAM-Med2D model'.
     """)
+    st.markdown("""
+    4. Buttons Below Image:
+        - ⤺ Undo: Removes the last point or bounding box.
+        - ⤼ Redo: Restores a removed point or bounding box.
+        - 🗑️ Clear: Erases all points or bounding boxes.
+    """)
+
+    
 
     st.markdown("""
     4. **Editing Your Points:**
@@ -61,8 +64,8 @@ def write_app_instructions():
     # ----- Tips & Best Practices -----
     st.subheader("Tips & Best Practices:")
     st.write("""
-    - Ensure that the points you mark on the image are representative of the regions you wish to segment.
-    - For the best results, mark multiple points both inside and outside the region of interest.
+    - For the **Multi-point Interaction** mode, just a few well-placed points can often provide the clarity the model needs.
+    - For the **Bounding Box** mode, ensure the boxes encapsulate the entirety of the region you're interested in.
     """)
 
     # ----- Conclusion -----

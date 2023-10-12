@@ -1,45 +1,83 @@
 import streamlit as st
 import streamlit.components.v1 as components
-from instructions import write_introduction
-
-text = """
-Across the nine MICCAI2023 datasets, SAM-Med2D (with the adapter layer dropped during test time)
-scored a Dice score of 90.12% (given BBox prompts) and 83.41% (given single-point prompts), compared to 81.93% and 60.31% 
-respectively for the SAM-Med2D model (with the adapter during test time) and 85.35% and 48.08% respectively for the SAM model.
-
-
-
-"""
-
-import requests
-from PIL import Image
-from io import BytesIO
 
 def app():
     st.title('SAM-Med2D Model Information')
-    st.subheader("👉 Source of Model")
-    st.write("The model is from the [SAM-Med2D paper](https://arxiv.org/pdf/2308.16184.pdf). The authors are Junlong Cheng, Jin Ye, \
-          Zhongying Deng, Jianpin Chen, Tianbin Li, Haoyu Wang, Yanzhou Su, Ziyan Huang, Jilong Chen, Lei Jiangand, \
-          Hui Sun, Junjun He, Shaoting Zhang, Min Zhu, and Yu Qiao.")
-    st.write("The images and much of the text on this page are from the corresponding [GitHub repository's](https://github.com/OpenGVLab/SAM-Med2D) README.md file.")
     
-
-    st.subheader('👉 Dataset')
+    st.subheader('👉 What is SAM-Med2D?')
     st.markdown("""
-    SAM-Med2D is trained and tested on a dataset that includes **4.6M images** and **19.7M masks**. 
-    This dataset covers 10 medical data modalities, 4 anatomical structures + lesions, and 31 major human organs. 
-    This is likely the largest and most diverse medical image segmentation dataset so far in terms of quantity and coverage of categories.
-    """)
-    st.image("assets/dataset.png", caption='Dataset Visualization', use_column_width=True)
+    SAM-Med2D is a state-of-the-art tool tailor-made for medical image analysis. All you need to do \
+    is show the model the areas of interest – either by clicking on the image or \
+    drawing a box around them. SAM-Med2D then zeroes in on those regions for deeper insights. \
+    Curious about the scientific foundation behind it? Dive into the \
+    [SAM-Med2D paper](https://arxiv.org/pdf/2308.16184.pdf).
 
-    st.subheader('👉 Framework')
+    The innovation comes from a team of dedicated researchers who combined their knowledge \
+    to advance the field of medical imaging. To learn more about the technical details, \
+    you can explore their [GitHub repository](https://github.com/OpenGVLab/SAM-Med2D). \
+    The images, captions, and some of the text on this page come from the repository's \
+    README.md file or the SAM-Med2D paper.
+                """)
     st.markdown("""
-    The pipeline of SAM-Med2D. We freeze the image encoder and incorporate learnable adapter layers in each Transformer block to acquire domain-specific knowledge in the medical field. 
-    We fine-tune the prompt encoder using point, Bbox, and mask information, while updating the parameters of the mask decoder through interactive training.
-    """)
-    st.image("assets/framwork.png", caption='Framework Visualization', use_column_width=True)
+    SAM-Med2D is a cutting-edge tool designed to analyze medical images; users can tell the model which regions they're interested in \
+    (by clicking on points in those regions or drawing boxes around them) and the model identifies those exact regions.\
+    This tool is built based on a research study presented in the [SAM-Med2D paper](https://arxiv.org/pdf/2308.16184.pdf). 
+                
+    The innovation comes from a team of dedicated researchers who combined their knowledge \
+    to advance the field of medical imaging. To learn more about the technical details, \
+    you can explore their [GitHub repository](https://github.com/OpenGVLab/SAM-Med2D). \
+    The images, captions, and some of the text on this page come from the corresponding \
+                GitHub repository's README.md file.
+    """
+    )
 
-    st.subheader('👉 Results')
+    
+    st.subheader('👉 Dataset information')
+    st.markdown("""
+    The dataset SAM-Med2D is trained on has 4.6 million medical images, covering 10 different medical imaging \
+    modalities, 31 major organs, and their corresponding anatomical structures.
+    """)
+
+    image_caption = """
+    Overview of the dataset used in this study. (a) A total of 31 major organs, along with
+    their corresponding anatomical structures, with an asterisk (*) denoting the presence of lesion labels
+    within the dataset. (b) The distribution of medical imaging modalities along with their corresponding proportions in
+    the dataset are presented (scaled logarithmically). (c) The number of images and masks categorized
+    by anatomical structure, along with the total count encompassing the dataset.
+    """
+    st.image("assets/dataset.png", caption=image_caption, use_column_width=True)
+
+    st.subheader("👉 A Peek Into the Model's Brain")
+    st.write("""
+    SAM-Med2D's 'brain' is a network of algorithms that help it process images. It has several layers \
+    and parts that work together to accurately segment the image (i.e., the user can select a \
+    point or draw a box on the image to tell the model what area they're interested in and the \
+    model will output the part(s) of interest within that area).
+    """)
+    framework_image_caption = """
+    The pipeline/architecture of SAM-Med2D. The image encoder is frozen and \
+    learnable adapter layers are incorporated \
+    in each Transformer block to acquire domain-specific knowledge in the medical field.
+    The prompt encoder was fine-tuned using point, Bbox, and mask information, while the
+    parameters of the mask decoder were updated through interactive training.
+    """
+    st.image("assets/framework.png", caption=framework_image_caption, use_column_width=True)
+
+    st.subheader('👉 Model Accuracy/Performance')
+
+    st.markdown("""
+    SAM Med2D's performance at a resolution of 256 **x** 256 demonstrates its strong capabilities \
+    ; the percentages are the model's Dice scores, which quantifies the overlap \
+    between the area that's segmented and the ground truth (i.e., correct answer)). \
+    A score of 100% means perfect overlap, and 0% means no overlap at all:
+    - **Bounding Box Prompt**: 79.30%
+    - **1 Point Prompt**: 70.01%
+    - **3 Points Prompt**: 76.35%
+    - **5 Points Prompt**: 78.68%
+
+    This robustness is further reflected in its generalization validation on the MICCAI2023 datasets. The model, even without the adapter layer (SAM-Med2D*), consistently outperforms the base SAM model across multiple benchmarks.
+    """)
+
     components.html("""
     <table>
         <caption align="center">Generalization validation on 9 MICCAI2023 datasets, where "*" denotes that we drop adapter layer of SAM-Med2D in test phase. </caption>
@@ -151,28 +189,16 @@ def app():
         </tr>
     </tbody>
     </table>
-    <p>Note that the performance metric is the Dice score, which quantifies the overlap between the area that's segmented and the ground truth (i.e., correct answer).</p>
+    <p>The numbers you see are Dice scores, which indicate that SAM-Med2D generally performs well; the higher the better. 
+    </p>
     """, scrolling = True)
 
     st.subheader('👉 Visualization')
-    st.image("assets/visualization.png", caption='Model Visualization', use_column_width=True)
-
-    # st.markdown("[Link to the official paper](https://arxiv.org/abs/2308.16184)")
-    # st.markdown("[Link to the GitHub repository](https://github.com/OpenGVLab/SAM-Med2D)")
+    model_visualization_caption = """
+    Qualitative comparisons were made between the segmentation results of SAM-Med2D and
+    SAM. SAM-Med2D outperformed SAM significantly.
+    """
+    st.image("assets/visualization.png", caption=model_visualization_caption, use_column_width=True)
 
 if __name__ == "__main__":
     app()
-
-def model_accuracy():
-    st.write("""
-    SAM Med2D's performance at a resolution of $256\times256$ showcases its impressive capabilities (the percentages are the model's Dice scores):
-    - **Bounding Box Prompt**: 79.30%
-    - **1 Point Prompt**: 70.01%
-    - **3 Points Prompt**: 76.35%
-    - **5 Points Prompt*: 78.68%
-
-    This robustness is further reflected in its generalization validation on the MICCAI2023 datasets. The model, even without the adapter layer (SAM-Med2D*), consistently outperforms the base SAM model across multiple benchmarks.
-    """)
-
-def model_information():
-    write_introduction()
