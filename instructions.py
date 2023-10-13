@@ -1,6 +1,6 @@
 import streamlit as st
 import io
-# Change file name to Instructions.py
+
 def write_introduction():
     st.title("SAM-Med2D Streamlit App")
     st.write("SAM-Med2D is an interactive medical image segmentation model based on the Segment Anything Model (SAM) model. \
