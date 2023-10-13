@@ -7,12 +7,16 @@ def write_introduction():
              This app provides a seamless experience for users to segment desired regions in medical images with good accuracy.")
 def write_app_instructions():
     st.subheader("Instructions for Using the App:")
+
+    # Instructions for image input
     st.markdown("""
     1. **Image Input:**
         - You can either: 
             * **Upload an image** directly from your device. Accepted formats are ".jpg", ".jpeg", or ".png".
             * Or **type in the image URL**. If using Google Search, right-click on the image and select "Copy Image Address" to obtain the URL.
         """)
+
+    # Instructions for model selection
     st.markdown("""
     2. **Model Selection:**
        - You'll have the option to select between two SAM-Med2D models: `SAM-Med2D-B_w/o_adapter` and `SAM-Med2D-B`. Make your choice from the dropdown menu. \
