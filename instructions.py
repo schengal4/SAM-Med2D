@@ -86,8 +86,6 @@ def cite_the_source(section_header):
           Hui Sun, Junjun He, Shaoting Zhang, Min Zhu, and Yu Qiao.")
 
     st.write("Also, a significant portion of the code in the app comes from the paper's associated GitHub code: https://github.com/OpenGVLab/SAM-Med2D.")
-
-# Initialize variables and file uploading UI
                     
 if __name__ == "__main__": 
     write_introduction()
