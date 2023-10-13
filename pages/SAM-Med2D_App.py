@@ -1,40 +1,36 @@
+# Streamlit related imports
 import streamlit as st
-import io
+
 container_1 = st.empty()
 container_1.info("Models are loading. If they aren't in the cache, they can take several minutes to load.")
 
-
 from streamlit_javascript import st_javascript
-import urllib.request
-from PIL import Image, ImageDraw, ImageFont
-from streamlit_image_coordinates import streamlit_image_coordinates
-import time
-import requests
+from streamlit_drawable_canvas import st_canvas
 
+# Image processing and IO related imports
+import io
+from PIL import Image, ImageDraw
+import urllib.request
+import requests
+from scipy import ndimage
+
+# Data manipulation and utility imports
 import numpy as np
-import matplotlib.pyplot as plt
-import cv2
+import pandas as pd
+import os
+import time
+import random
+import threading
+
+# Deep Learning and model related imports
 from segment_anything import sam_model_registry
 from segment_anything.predictor_sammed import SammedPredictor
 from argparse import Namespace
 import torch
-import torchvision
-import os, sys
-import random
-import warnings
-from scipy import ndimage
-import functools
-import pandas as pd
 
+# Custom module imports
 from Instructions import write_introduction
-from streamlit_drawable_canvas import st_canvas
 
-
-# pip install streamlit-image-annotation (bounding box), image url option
-# from huggingface_hub import hf_hub_download
-# hf_hub_download("schengal1/SAM-Med2D_model", "sam-med2d_b.pth")
-# print(os.getcwd())
-# time.sleep(200)
 
 
 
@@ -50,7 +46,7 @@ args.image_size = 256
 args.encoder_adapter = True
 args.sam_checkpoint = "sam-med2d_b.pth"
 sources = """
-Much of the code in the functions came from
+A lot of the code in the functions came from
 {cheng2023sammed2d,
       title={SAM-Med2D}, 
       author={Junlong Cheng and Jin Ye and Zhongying Deng and Jianpin Chen and Tianbin Li and Haoyu Wang and Yanzhou Su and
@@ -63,8 +59,9 @@ Much of the code in the functions came from
 """
 
 def download_model():
-    if os.path.exists('sam-med2d_b.pth'):
-        print("Model already exists locally. Using existing copy of it.")
+    if os.path.exists('sam-med2d_b.pth') and os.path.getsize('sam-med2d_b.pth') >= 2.385*1024*1024*1024:
+        # print("Model already exists locally. Using existing copy of it.")
+        # print(os.path.getsize('sam-med2d_b.pth')/(1024*1024*1024), "GB")
         return
     # URL of the model
     url = "https://healthuniverse-models-production.s3.amazonaws.com/SAM-Med2D/data.pkl"
@@ -117,10 +114,13 @@ def load_model(_args):
     return predictor
 
 # Initializaiton code to load the models.
-download_model()
-predictor_with_adapter = load_model(args) # Loads the model with the adapter layer
-args.encoder_adapter = False
-predictor_without_adapter = load_model(args) # Loads the similar model but without the adapter layer
+#TODO: Make this thread safe.
+lock = threading.Lock()
+with lock:
+    download_model()
+    predictor_with_adapter = load_model(args) # Loads the model with the adapter layer
+    args.encoder_adapter = False
+    predictor_without_adapter = load_model(args) # Loads the similar model but without the adapter layer
 container_1.info("Models are loaded.") # See statement below import streamlit as st for where container_1 is declared.
 
 # Other functions used to run the app
@@ -185,7 +185,7 @@ def run_sammed(input_image, selected_points, last_mask, adapter_type):
     last_mask = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
     return [(image_pil, mask_image), last_mask]
 
-def run_sammed_bbox_draft(input_image, original_bboxes, last_mask, adapter_type):
+def run_sammed_bbox(input_image, original_bboxes, last_mask, adapter_type):
 
     """
     Performs segmentation on the provided image using selected points and an optional previous mask.
@@ -214,46 +214,39 @@ def run_sammed_bbox_draft(input_image, original_bboxes, last_mask, adapter_type)
     else:
         predictor = predictor_without_adapter
         
-    image_pil = Image.fromarray(input_image).convert("RGB")
+    image_pil = Image.fromarray(input_image).convert("RGBA")
     image = input_image
     H,W,_ = image.shape
     predictor.set_image(image)
 
     mask_image = Image.new('RGBA', (W, H), color=(0, 0, 0, 0))
-    mask_draw = ImageDraw.Draw(mask_image)
+
     for i in range(len(original_bboxes)):
         last_mask_ = None
+        # Making the model iterate on itself for slightly improved accuracy.
         for j in range(4):
             masks, _, logits = predictor.predict(
             box=original_bboxes[i], 
             mask_input = last_mask_, #TODO: Adjust this to reflect continuous improvement
             multimask_output=True 
             ) 
-            # if j == 3:
-            #     print(np.percentile(logits, 100))
-            #     print(np.percentile(logits, 99.99))
             last_mask_ = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
-
+    
         # Draw masks on the image.
-        mask_image = Image.new('RGBA', (W, H), color=(0, 0, 0, 0))
-        mask_draw = ImageDraw.Draw(mask_image)
-        
-        for mask in masks:
-            draw_mask(mask, mask_draw, random_color=False)
-        image_pil = image_pil.convert('RGBA')
-        image_pil.alpha_composite(mask_image)
+        mask_image_ = Image.new('RGBA', (W, H), color=(0, 0, 0, 0))
+        mask_draw_ = ImageDraw.Draw(mask_image_)
+        draw_mask(masks[0], mask_draw_, random_color=False)
+        mask_image.alpha_composite(mask_image_)
 
-        image_draw = ImageDraw.Draw(image_pil)
-        for bbox in original_bboxes:
-            upper_left_coordinate = (bbox[0], bbox[1])
-            lower_right_coordinate = (bbox[2], bbox[3])
-            width_ = max(2, W//300)
-            image_draw.rectangle((upper_left_coordinate, lower_right_coordinate), outline="green", width=width_)
+    # image_pil = image_pil.convert('RGBA')
+    image_pil.alpha_composite(mask_image)
 
-    # draw_points(selected_points, image_draw)
-    # bbox_Draw = ImageDraw.Draw()
-    # for bbox in original_bboxes:
-    #     draw.rectangle(list(bbox), fill=(0, 255, 0, 0.5), 
+    image_draw = ImageDraw.Draw(image_pil)
+    for bbox in original_bboxes:
+        upper_left_coordinate = (bbox[0], bbox[1])
+        lower_right_coordinate = (bbox[2], bbox[3])
+        width_ = max(2, W//300)
+        image_draw.rectangle((upper_left_coordinate, lower_right_coordinate), outline="green", width=width_)
 
     return [(image_pil, mask_image), last_mask]
 
@@ -280,9 +273,7 @@ def draw_mask(mask, draw, random_color=False):
         color = (30, 144, 255, int(255*0.5))
 
     nonzero_coords = np.transpose(np.nonzero(mask))
-
     for coord in nonzero_coords:
-
         draw.point(coord[::-1], fill=color)
 # TODO: Draw label = 0 points as red crosses instead of red circles. Also, eliminate hardcoding
 def draw_points(points, draw, r=5):
@@ -341,18 +332,12 @@ def get_original_bbox_coords(resized_bbox_coords, scaling_factor):
     original_bboxes = np.array(resized_bbox_coords)/scaling_factor
     return np.rint(original_bboxes)
 
-def attempt_rerun():
-    """
-    Tries to stop the execution of streamlit script and then rerun from the beginning.
-    """
-    try:
-        st.experimental_rerun()
-    except Exception as e:
-        st.error("Streamlit UI Error: Points won't display on image as expected. \
-                                Please click again on the point you previously clicked on to fix this issue.")
-def reset_points_and_masks():
-    st.session_state['points'] = []
+def reset_stored_masks_and_images():
     st.session_state['last_mask'] = None
+    if 'previous_image_with_mask' in st.session_state: 
+        del st.session_state['previous_image_with_mask'] 
+    if 'previous_mask' in st.session_state: 
+        del st.session_state['previous_mask']
 def initialize_styling():
     # TODO: image-with-the-indicated region segmented is the id of the subheader. if the subheader title changes, the id will change and some of the CSS below won't work.
     try:
@@ -362,7 +347,7 @@ def initialize_styling():
             display: block;
             margin-left: auto;
             margin-right: auto;
-            align-items: center;
+            align-items: center !important;
         }
         #image-with-the-indicated-region-s-segmented {
             text-align: center;        
@@ -375,9 +360,39 @@ def initialize_styling():
 
 def return_bbox_coordinates(canvas_result, stroke_width):
     """
-    Takes the canvas result and returns bbox coordinates. For now takes in the objects df
+    Returns the bounding box coordinates for objects drawn on a canvas.
+    
+    This function processes the drawing results from a canvas and calculates the 
+    bounding box coordinates of each object, taking into consideration the stroke width.
+
+    Parameters:
+    - canvas_result (object): The result object from a Streamlit canvas which contains 
+      drawing data.
+    - stroke_width (int): The width of the stroke used to draw on the canvas. This 
+      subtly influences the bounding box dimensions.
+
+    Returns:
+    - np.array: An array of bounding box coordinates. Each entry is a list in the format: 
+      [x_upper_left, y_upper_left, x_lower_right, y_lower_right]. Returns an empty array 
+      if no objects are detected.
+
+    Notes:
+    - The function assumes that the drawing consists of rectangles, and thus the bounding 
+      box is determined by the top-left and bottom-right corners of each rectangle.
     """
     def get_bbox_info(left, top, width, height, stroke_width):
+        """ 
+        Calculate the bounding box coordinates for a given rectangle.
+
+        Parameters:
+        - left, top (float): The coordinates of the top-left corner of the rectangle.
+        - width, height (float): The width and height of the rectangle.
+        - stroke_width (int): The width of the stroke used to draw the rectangle.
+
+        Returns:
+        - list: A list containing the bounding box coordinates in the format: 
+          [x_upper_left, y_upper_left, x_lower_right, y_lower_right].
+        """
         x1, y1, x2, y2 = float(left), float(top), float(left + width + stroke_width), float(top + height + stroke_width)
         return [x1, y1, x2, y2]
     # Get the objects dataframe from the canvas result
@@ -398,33 +413,58 @@ def return_bbox_coordinates(canvas_result, stroke_width):
     return result
 
 def return_clicked_coordinates(canvas_result, stroke_width):
+    """
+    Extracts the clicked coordinates and their associated labels from a canvas drawing.
+    
+    This function processes the drawing results from a canvas, identifies the clicked 
+    points based on their fill colors, and returns their coordinates along with labels.
+
+    Parameters:
+    - canvas_result (object): The result object from a Streamlit canvas which contains 
+      drawing data.
+    - stroke_width (int): The width of the stroke used to mark points on the canvas. This 
+      influences the coordinate extraction.
+
+    Returns:
+    - list of tuples: A list containing tuples, where each tuple consists of the point's 
+      coordinates as a (x, y) pair and a label (1 for green, 0 for red). Returns an empty 
+      list if no objects are detected.
+
+    Notes:
+    - The function assumes that points are marked with either green (indicating a FOREGROUND_POINT label) 
+      or red (indicating a BACKGROUND_POINT label) fill colors.
+    - Coordinates are adjusted based on stroke_width to better represent the true clicked 
+      position.
+    """
+    # Get information abuot the points from the canvas result
     if canvas_result.json_data is not None:
         objects = pd.json_normalize(canvas_result.json_data["objects"])
     for col in objects.select_dtypes(include=["object"]).columns:
         objects[col] = objects[col].astype("str")
-    # st.dataframe(objects)
+     
     if objects.empty:
         return []
 
     points_info = objects.loc[:, ["left", "top", "fill"]]
     points_info = points_info.to_numpy()
 
+    # Compute the coordinates of the points and get the labels
     coords = []
     for row in points_info:
         x, y = int(row[0]) + int(stroke_width)//2, int(row[1])
         if row[2] == "green":
-            label = 1
+            label = FOREGROUND_POINT
         elif row[2] == "red":
-            label = 0
+            label = BACKGROUND_POINT
         coords.append(((round(x), round(y)), label))
     return coords
         
-# Initialize variables and file uploading UI
+
 def main():
     initialize_styling()
     write_introduction()
-    if 'points' not in st.session_state:
-        st.session_state['points'] = []
+
+    # Initialize variables and file uploading UI
     if 'last_mask' not in st.session_state:
         st.session_state['last_mask'] = None
     if 'run_id' not in st.session_state:
@@ -433,42 +473,51 @@ def main():
         st.session_state['uploaded_file_id'] = None
     if 'uploaded_image_URL' not in st.session_state:
         st.session_state['uploaded_image_URL'] = None
+
     # File uploader widget or get image from URL
     input_choice_help = """
     You can **upload an image** (.jpg, .jpeg, or .png) directly from your device or **type in the image URL**. \
     Select your preferred option.
     """
     input_choice = st.radio("You can ...", ["Upload an image (.jpg, .jpeg, or .png)", "Or, type in the image URL"], horizontal=True, help=input_choice_help)
-    if ("upload" in input_choice.lower() and "image" in input_choice.lower() and "url" not in input_choice.lower()):
+    LOADING_IMAGE_MESSAGE = "Loading image and preparing to display it. This can take several seconds."
+    # Handles case where user uploads image directly from their device.
+    if "upload an image" in input_choice.lower():
         uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
         uploading_file_progress_message = st.empty()
         container_1.empty()
         if uploaded_file is not None and uploaded_file.file_id != st.session_state['uploaded_file_id']:
-            uploading_file_progress_message.info("Loading image and preparing to display it. This can take several seconds.")
-            reset_points_and_masks()
+            uploading_file_progress_message.info(LOADING_IMAGE_MESSAGE)
+            reset_stored_masks_and_images()
             st.session_state['uploaded_file_id'] = uploaded_file.file_id
-    # elif ("dicom" in input_choice.lower()):
-    #   uploaded_file = st.file_uploader("Choose a DICOM file...")
-    #     
-    elif "image" in input_choice.lower() and "url" in input_choice.lower():
+            st.session_state['uploaded_image_URL'] = None
+    # Handles case where user enters the image URL.
+    elif "url" in input_choice.lower():
+            # Text input field where user can enter the image URL
             image_url_help = "Paste the direct URL link of the image you'd like to analyze. \
                 For most images on the web, to get the URL, right-click on it. Then, select/click \
                 on 'Copy Image Address'."
-            image_url = st.text_input("Enter the URL of the image you want to upload below (e.g., https://pressbooks.pub/app/uploads/sites/3987/2017/10/chest-case-12-2-909x1024.jpg)", help = image_url_help)
+            image_url = st.text_input("Enter the URL of the image you want to upload below \
+            (e.g., https://pressbooks.pub/app/uploads/sites/3987/2017/10/chest-case-12-2-909x1024.jpg)", 
+            help = image_url_help)
+
             uploading_file_progress_message = st.empty()
             container_1.empty()
             if image_url.strip() != "": # Checks if the user entered some text for the image URL
+                # Tries to retrieve image from the URL. If this doesn't work, it outputs an error message.
+                # If it works, it handles this appropriately.
                 try:
-                    urllib.request.urlretrieve(image_url, "__image.png")
-                except: 
-                    st.error("The URL you entered isn't working.") # If the user enters an invalid URL
+                    uploaded_file = io.BytesIO(urllib.request.urlopen(image_url).read())
+                except Exception as e: 
+                    st.error("The URL you entered isn't working. Or, you're facing connection issues.")
+                    st.error("Error message: " + str(e)) # If the user enters an invalid URL
                     uploaded_file = None
                 else:
-                    uploaded_file = "__image.png"
                     if image_url != st.session_state['uploaded_image_URL']:
-                        uploading_file_progress_message.info("Loading image and preparing to display it. This can take several seconds.")
+                        uploading_file_progress_message.info(LOADING_IMAGE_MESSAGE)
+                        reset_stored_masks_and_images()
                         st.session_state['uploaded_image_URL'] = image_url
-                        reset_points_and_masks()
+                        st.session_state['uploaded_file_id'] = [None]
             else:
                 uploaded_file = None
             
@@ -478,7 +527,7 @@ def main():
 
     **Note**: When tested on various datasets, the "SAM-Med2D-B_w/o_adapter" model generally outperformed the "SAM-Med2D-B" model.
     """
-    #TODO: (Minor) Add details about what the adapter means in the tooltip
+
     model = st.selectbox("Select Adapter for Model", ("SAM-Med2D-B_w/o_adapter", "SAM-Med2D-B"), help=model_selection_tooltip)
 
 
@@ -516,9 +565,6 @@ def main():
             # Detect where the user clicked on the image and add 
             # the respective image coordinates to st.session_state and the image itself.
             if mode == "Multi-point interaction":
-                # streamlit_image_coordinates returns the value of the previously clicked coordinates, even if on a 
-                # previous run. This was causing some unexpected UI behavior. So, the run_id = st.session_state['run_id'] 
-                # statement and the later statement incrementing st.session_state['run_id'] += 1 are meant to correct this.
                 stroke_width_ = 6
                 st.markdown("""
                 Below is your image. Please follow these steps:
@@ -599,16 +645,10 @@ def main():
                     st.session_state["last_mask"] = None
 
                 uploading_file_progress_message.empty()
-                    # if value is not None:
-                    #     point = int(value["x"]), int(value["y"])
-                    #     all_points = [pt for pt, label_ in st.session_state["points"]]
-                    #     if (point, label) not in st.session_state['points']:
-                    #         st.session_state["points"].append((point, label))
-                    #         st.session_state['run_id'] += 1
-                    #         attempt_rerun()
             # Run ML model on image with the points the user selected passed in.
             run_model = st.button("Run SAM-Med2D model.")
             if run_model:
+                st.session_state['run_id'] += 1
                 running_model = st.empty()
                 running_model.info("Running the image segmentation algorithm. This can take several seconds.")
                 if mode == "Multi-point interaction":
@@ -631,6 +671,7 @@ def main():
                         buf = io.BytesIO()
                         image_with_mask.save(buf, format="PNG")
                         image_bytes = buf.getvalue()
+    
                         btn = st.download_button(
                             label="Download image",
                             data=image_bytes,
@@ -640,37 +681,51 @@ def main():
                     if len(bounding_boxes) == 0:
                         st.error("Please draw at least one rectangle in the above image before running the model.")
                     else:
-                        try:
-                            val1, val2 = run_sammed_bbox(np.array(img), get_original_bbox_coords(bounding_boxes, scaling_factor), 
-                                                    st.session_state['last_mask'], model)
-                        except:
-                            # st.info("Implemented multiple-bbox-selection functionality by repeatedly calling the model on each of the individual bboxes\
-                                    # Currently working on implementing it directly.")
-                            val1, val2 = run_sammed_bbox_draft(np.array(img), get_original_bbox_coords(bounding_boxes, scaling_factor), 
+                        val1, val2 = run_sammed_bbox(np.array(img), get_original_bbox_coords(bounding_boxes, scaling_factor), 
                                                     st.session_state['last_mask'], model)
                         image_with_mask, mask = val1
-                        st.session_state['last_mask'] = val2
-                        st.divider()
-                        st.subheader("Image with the Indicated Region(s) Segmented")
-                        st.image(image_with_mask, use_column_width=True)
+                        st.session_state['previous_image_with_mask'] = image_with_mask
+                        st.session_state['previous_mask'] = mask
+            if "previous_image_with_mask" in st.session_state and "previous_mask" in st.session_state:
+                st.divider()
+                st.subheader("Image with the Indicated Region(s) Segmented")
+                image_with_mask = st.session_state["previous_image_with_mask"]
+                st.image(image_with_mask, use_column_width=True)
+                _, col1, col2 = st.columns([1, 3, 6])
+                buf = io.BytesIO()
+                image_with_mask.save(buf, format="PNG")
+                image_bytes = buf.getvalue()
 
-                        buf = io.BytesIO()
-                        image_with_mask.save(buf, format="PNG")
-                        image_bytes = buf.getvalue()
-                        btn = st.download_button(
-                            label="Download image",
-                            data=image_bytes,
-                            mime="image/png"
-                        )
+                img_download_btn_help = """
+                Click here to download the image with the segmented parts in blue, \
+                along with the corresponding bounding boxes or points.
+                """
+                btn = col1.download_button(
+                    label="Download image",
+                    data=image_bytes,
+                    mime="image/png",
+                    file_name="result_img_" + str(st.session_state['run_id']) + ".png",
+                    help = img_download_btn_help
+                )
+
+                mask = st.session_state['previous_mask']
+                buf_masks = io.BytesIO()
+                mask.save(buf_masks, format="PNG")
+                mask_bytes = buf_masks.getvalue()
+
+                masks_download_btn_help = """
+                Click here to download the masks only (without the underlying image). \
+                The masks correspond to the blue parts of the image shown above.
+                """
+                btn_masks = col2.download_button(
+                    label = "Download masks without underlying image",
+                    data = mask_bytes,
+                    mime = "image/png",
+                    file_name="result_masks_" + str(st.session_state['run_id']) + ".png",
+                    help = masks_download_btn_help
+                )
+            if run_model:
                 running_model.empty()
-
-
-            # BBox Mode; 
-            # canvas_result = st_canvas(fill_color="rgba(25, 255, 25, 0.3)", stroke_color="rgba(25, 255, 25, 0.8)", stroke_width= 5, background_image=img, height=new_height, width=new_width, drawing_mode="rect", key="bbox_canvas")
-            # st.write(return_bbox_coordinates(canvas_result))
-
-            # st.subheader("Points coordinates")
-                # Top: center; left = center - radius
 
             
 if __name__ == "__main__": 

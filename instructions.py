@@ -57,6 +57,7 @@ def write_app_instructions():
     6. **Viewing & Downloading the Results:**
        - Once segmentation is complete, the segmented image will be displayed under the subheader "Image with the Indicated Region Segmented."
        - To download the segmented image, click the "Download image" button.
+       - To download the masks alone without the underlying image, click the "Download masks without underlying image" button.
     """)
 
     # ... [Your existing code for Viewing & Downloading the Results]
