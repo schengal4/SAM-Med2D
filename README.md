@@ -1,6 +1,6 @@
 # SAM-Med2D Streamlit App
 
-Welcome to the SAM-Med2D Streamlit App. This application provides an interactive interface for medical image segmentation based on the Segment Anything Model (SAM) model.
+Welcome to the SAM-Med2D Streamlit App. This application provides an interactive interface for medical image segmentation based on the Segment Anything Model (SAM) model fine-tuned for medical imaging.
 
 ## Overview
 
