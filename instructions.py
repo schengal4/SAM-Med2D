@@ -7,7 +7,6 @@ def write_introduction():
              This app provides a seamless experience for users to segment desired regions in medical images with good accuracy.")
 def write_app_instructions():
     st.subheader("Instructions for Using the App:")
-
     st.markdown("""
     1. **Image Input:**
         - You can either: 
@@ -19,6 +18,8 @@ def write_app_instructions():
        - You'll have the option to select between two SAM-Med2D models: `SAM-Med2D-B_w/o_adapter` and `SAM-Med2D-B`. Make your choice from the dropdown menu. \
         The 'SAM-Med2D-B_w/o_adapter' model slightly performs the other according to testing done by the model makers.
     """)
+
+    # Segmentation mode instructions
     st.markdown("""
     3. **Segmentation Mode**
         - **Bounding Box Mode**: Draw rectangles around the area you wish to segment.
@@ -28,6 +29,8 @@ def write_app_instructions():
             * Background Points (Red): Specify areas you're not interested in, helping the model differentiate.
             * After marking the points, click 'Run SAM-Med2D model'.
     """)
+
+    # How to undo/redo/clear the previously drawn point/bounding box.
     st.markdown("""
     4. Buttons Below Image:
         - ⤺ Undo: Removes the last point or bounding box.
@@ -35,24 +38,15 @@ def write_app_instructions():
         - 🗑️ Clear: Erases all points or bounding boxes.
     """)
 
-    
-
-    st.markdown("""
-    4. **Editing Your Points:**
-       - To erase all marked points, click the "Erase All Marked Points on the Image" button.
-    """)
-
-    # ... [Your existing code for Editing Your Points]
-
+    # Initiating Segmentation Process Instructions
     st.markdown("""
     5. **Initiating the Segmentation Process:**
        - After marking your points, click the "Run SAM-Med2D model" button.
        - Please be patient, as the algorithm processes the image. An info message will appear indicating that the model is running.
-       - If you haven't selected a foreground point, you'll be prompted to do so before the model can proceed.
+       - If you haven't selected a foreground point or drawn a bounding box (depending on the mode), you'll be prompted to do so before the model can proceed.
     """)
-
-    # ... [Your existing code for Initiating the Segmentation Process]
-
+    
+    # Viewing and Downloading Results from ML algorithm
     st.markdown("""
     6. **Viewing & Downloading the Results:**
        - Once segmentation is complete, the segmented image will be displayed under the subheader "Image with the Indicated Region Segmented."
@@ -60,16 +54,14 @@ def write_app_instructions():
        - To download the masks alone without the underlying image, click the "Download masks without underlying image" button.
     """)
 
-    # ... [Your existing code for Viewing & Downloading the Results]
-
-    # ----- Tips & Best Practices -----
+    # Tips & Best Practices section
     st.subheader("Tips & Best Practices:")
     st.write("""
     - For the **Multi-point Interaction** mode, just a few well-placed points can often provide the clarity the model needs.
     - For the **Bounding Box** mode, ensure the boxes encapsulate the entirety of the region you're interested in.
     """)
 
-    # ----- Conclusion -----
+    # Conclusion
     st.subheader("Conclusion:")
     st.write("""
     We hope that you find this app helpful in your medical image analysis tasks. We're committed to refining and enhancing this tool and welcome all feedback to serve our users better.
