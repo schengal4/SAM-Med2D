@@ -3,30 +3,32 @@ import streamlit as st
 
 container_1 = st.empty()
 container_1.info("Models are loading. If they aren't in the cache, they can take several minutes to load.")
+container_2 = st.empty()
 
 from streamlit_javascript import st_javascript
 from streamlit_drawable_canvas import st_canvas
 
 # Image processing and IO related imports
-import io
+import io 
 from PIL import Image, ImageDraw
 import urllib.request
-import requests
+import requests 
 from scipy import ndimage
 
 # Data manipulation and utility imports
 import numpy as np
 import pandas as pd
 import os
-import time
-import random
-import threading
+import time 
+import random 
+import threading 
 
 # Deep Learning and model related imports
 from segment_anything import sam_model_registry
 from segment_anything.predictor_sammed import SammedPredictor
+
 from argparse import Namespace
-import torch
+import torch 
 
 # Custom module imports
 from Instructions import write_introduction
@@ -64,6 +66,7 @@ def download_model():
         # print(os.path.getsize('sam-med2d_b.pth')/(1024*1024*1024), "GB")
         return
     # URL of the model
+    container_2.info("Downloading the model to the program now.")
     url = "https://healthuniverse-models-production.s3.amazonaws.com/SAM-Med2D/data.pkl"
 
     # Send a GET request to the URL
@@ -85,7 +88,7 @@ def download_model():
             
             # Update the progress bar
             # progress_bar.progress(progress / total_size)
-
+    container_2.info("Finished downloading the models. Loading them to be used.")
 @st.cache_resource
 def load_model(_args):
     """
@@ -121,7 +124,8 @@ with lock:
     predictor_with_adapter = load_model(args) # Loads the model with the adapter layer
     args.encoder_adapter = False
     predictor_without_adapter = load_model(args) # Loads the similar model but without the adapter layer
-container_1.info("Models are loaded.") # See statement below import streamlit as st for where container_1 is declared.
+container_1.info("Finished loading the models.")  # See statement below import streamlit as st for where container_1 is declared.
+container_2.empty()  # See statement below import streamlit as st for where container_2 is declared.
 
 # Other functions used to run the app
 def run_sammed(input_image, selected_points, last_mask, adapter_type):
@@ -227,7 +231,7 @@ def run_sammed_bbox(input_image, original_bboxes, last_mask, adapter_type):
         for j in range(4):
             masks, _, logits = predictor.predict(
             box=original_bboxes[i], 
-            mask_input = last_mask_, #TODO: Adjust this to reflect continuous improvement
+            mask_input = last_mask_,
             multimask_output=True 
             ) 
             last_mask_ = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
@@ -275,7 +279,7 @@ def draw_mask(mask, draw, random_color=False):
     nonzero_coords = np.transpose(np.nonzero(mask))
     for coord in nonzero_coords:
         draw.point(coord[::-1], fill=color)
-# TODO: Draw label = 0 points as red crosses instead of red circles. Also, eliminate hardcoding
+
 def draw_points(points, draw, r=5):
     """
     Draws labeled points onto a given drawable surface in memory (not yet onto the Streamlit UI).
@@ -594,7 +598,6 @@ def main():
                 """)
 
                 # Select whether the point is a foreground point (e.g., in the area the user is interested in) or a background point (outside the area in which the user is interested in)
-                #TODO: (Minor) Consider adding the fact that the user can add more points and iteratively improve on the previous result.
                 point_label_help = """
                 - **Foreground Points (Green)**: Click on areas you're interested in. For instance, if you're examining an MRI scan and want to emphasize a potential lesion, place green points on that region.
                 - **Background Points (Red)**: Mark areas you're not focusing on. These red points help the tool differentiate areas of non-interest. For regions in the MRI scan you're not concerned about, mark them with red points.  
@@ -664,19 +667,8 @@ def main():
                                             st.session_state['last_mask'], model)
                         image_with_mask, mask = val1
                         st.session_state['last_mask'] = val2
-                        st.divider()
-                        st.subheader("Image with the Indicated Region(s) Segmented")
-                        st.image(image_with_mask, use_column_width=True)
-
-                        buf = io.BytesIO()
-                        image_with_mask.save(buf, format="PNG")
-                        image_bytes = buf.getvalue()
-    
-                        btn = st.download_button(
-                            label="Download image",
-                            data=image_bytes,
-                            mime="image/png"
-                        )
+                        st.session_state['previous_image_with_mask'] = image_with_mask
+                        st.session_state['previous_mask'] = mask
                 if mode == "Bounding Box":
                     if len(bounding_boxes) == 0:
                         st.error("Please draw at least one rectangle in the above image before running the model.")
