@@ -227,14 +227,13 @@ def run_sammed_bbox(input_image, original_bboxes, last_mask, adapter_type):
 
     for i in range(len(original_bboxes)):
         last_mask_ = None
-        # Making the model iterate on itself for slightly improved accuracy.
-        for j in range(4):
-            masks, _, logits = predictor.predict(
-            box=original_bboxes[i], 
-            mask_input = last_mask_,
-            multimask_output=True 
-            ) 
-            last_mask_ = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
+        
+        masks, _, logits = predictor.predict(
+        box=original_bboxes[i], 
+        mask_input = last_mask_,
+        multimask_output=True 
+        ) 
+        last_mask_ = torch.sigmoid(torch.as_tensor(logits, dtype=torch.float, device=device))
     
         # Draw masks on the image.
         mask_image_ = Image.new('RGBA', (W, H), color=(0, 0, 0, 0))

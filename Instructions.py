@@ -20,7 +20,7 @@ def write_app_instructions():
     st.markdown("""
     2. **Model Selection:**
        - You'll have the option to select between two SAM-Med2D models: `SAM-Med2D-B_w/o_adapter` and `SAM-Med2D-B`. Make your choice from the dropdown menu. \
-        The 'SAM-Med2D-B_w/o_adapter' model slightly performs the other according to testing done by the model makers.
+        The 'SAM-Med2D-B_w/o_adapter' model slightly outperforms the other according to testing done by the model makers.
     """)
 
     # Segmentation mode instructions
