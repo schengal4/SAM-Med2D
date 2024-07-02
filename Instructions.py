@@ -3,8 +3,8 @@ import io
 
 def write_introduction():
     st.title("SAM-Med2D Streamlit App")
-    st.write("SAM-Med2D is an interactive medical image segmentation model based on the Segment Anything Model (SAM) model. \
-             This app provides a seamless experience for users to segment desired regions in medical images with good accuracy.")
+    st.write('SAM-Med2D is an interactive medical image segmentation model based on the Segment Anything Model (SAM) model. \
+             This app provides a seamless experience for users to segment desired regions in medical images with good accuracy. To get started, read the instructions below and click the "SAM-Med2D App" page in the left sidebar.')
 def write_app_instructions():
     st.subheader("Instructions for Using the App:")
 
