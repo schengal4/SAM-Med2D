@@ -31,7 +31,10 @@ from argparse import Namespace
 import torch 
 
 # Custom module imports
-from Instructions import write_introduction
+def write_introduction():
+    st.title("SAM-Med2D Streamlit App")
+    st.write('SAM-Med2D is an interactive medical image segmentation model based on the Segment Anything Model (SAM) model. \
+             This app provides a seamless experience for users to segment desired regions in medical images with good accuracy.')
 
 
 
@@ -486,7 +489,7 @@ def main():
     LOADING_IMAGE_MESSAGE = "Loading image and preparing to display it. This can take several seconds."
     # Handles case where user uploads image directly from their device.
     if "upload an image" in input_choice.lower():
-        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"], help = "See https://pressbooks.pub/app/uploads/sites/3987/2017/10/chest-case-12-2-909x1024.jpg for an example image.")
         uploading_file_progress_message = st.empty()
         container_1.empty()
         if uploaded_file is not None and uploaded_file.file_id != st.session_state['uploaded_file_id']:
@@ -648,7 +651,7 @@ def main():
 
                 uploading_file_progress_message.empty()
             # Run ML model on image with the points the user selected passed in.
-            run_model = st.button("Run SAM-Med2D model.")
+            run_model = st.button("Run SAM-Med2D model")
             if run_model:
                 st.session_state['run_id'] += 1
                 running_model = st.empty()
