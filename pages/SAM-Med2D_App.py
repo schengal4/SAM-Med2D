@@ -2,7 +2,7 @@
 import streamlit as st
 
 container_1 = st.empty()
-container_1.info("Models are loading. If they aren't in the cache, they can take several minutes to load.")
+container_1.info("Models are loading. If they aren't in the browser cache, they can take several minutes to load.")
 container_2 = st.empty()
 
 from streamlit_javascript import st_javascript
